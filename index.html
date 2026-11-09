@@ -103,9 +103,9 @@ function table(csv){const t=parseCSV(csv),head=t[0].map(h=>h.trim().toLowerCase(
 function buildWords(csv){const T=table(csv),g=n=>T.col(n);
  const keys=['word','gloss','component','group','klal','ney','cy','sey','hint','notes'],ix={};keys.forEach(k=>ix[k]=g(k));
  return T.rows.filter(r=>(r[ix.word]||'').trim()).map(r=>{const o={};keys.forEach(k=>o[k]=ix[k]>=0?(r[ix[k]]||'').trim():'');
-  o.nw=norm(o.word);o.ng=norm(o.gloss);o.np=[o.klal,o.ney,o.cy,o.sey].map(norm).join('|');return o})}
+  o.group=o.group.toLowerCase();o.nw=norm(o.word);o.ng=norm(o.gloss);o.np=[o.klal,o.ney,o.cy,o.sey].map(norm).join('|');return o})}
 function buildRules(csv){const T=table(csv),c=n=>T.col(n);
- return T.rows.map(r=>({code:(r[c('code')]||'').trim(),name:(r[c('rule')]||'').trim(),when:(r[c('applies when')]||'').trim(),pron:(r[c('pronunciation')]||'').trim()})).filter(r=>r.name)}
+ return T.rows.map(r=>({code:(r[c('code')]||'').trim().toLowerCase(),name:(r[c('rule')]||'').trim(),when:(r[c('applies when')]||'').trim(),pron:(r[c('pronunciation')]||'').trim()})).filter(r=>r.name)}
 function buildPairs(csv){const T=table(csv);return {head:T.head,rows:T.rows}}
 
 let words=[],rules=[],pairs={head:[],rows:[]},matches=[],shown=0;
