@@ -21,7 +21,12 @@ main{max-width:680px;margin:0 auto;padding:16px}
 header{position:sticky;top:0;background:var(--bg);padding:12px 0 10px;z-index:2}
 h1{font-size:19px;line-height:1.3;margin:6px 0 0;color:var(--acc)}
 input{width:100%;font:inherit;font-size:20px;padding:14px 16px;border:2px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
+#qrow{display:flex;gap:8px;align-items:stretch}
+#qrow input{flex:1;min-width:0;width:auto}
+#yid-toggle{flex:none;min-width:48px;border:2px solid var(--line);border-radius:10px;background:var(--card);color:var(--mut);font-size:20px;font-weight:600;padding:0 12px}
+#yid-toggle.on{background:var(--acc);border-color:var(--acc);color:var(--card)}
 input:focus{outline:none;border-color:var(--acc)}
+#q.yid-on{border-color:var(--acc)}
 button{font:inherit;cursor:pointer}
 #status{display:flex;justify-content:space-between;gap:8px;color:var(--mut);font-size:13px;margin-top:8px;min-height:20px}
 #refresh{background:none;border:0;color:var(--acc);font-size:13px;padding:0}
@@ -67,7 +72,8 @@ th{background:var(--nabg)}
 <main>
 <h1>Oy Search: the <span class="he" lang="yi">וי</span> vowel by dialect</h1>
 <header>
-<input id="q" type="search" dir="auto" lang="yi" placeholder="Search a Yiddish word…" autocomplete="off" autocapitalize="off" spellcheck="false" autofocus>
+<div id="qrow"><input id="q" type="search" dir="auto" lang="yi" placeholder="Search a Yiddish word…" autocomplete="off" autocapitalize="off" spellcheck="false" autofocus>
+<button type="button" id="yid-toggle" title="Toggle Yiddish typing (or type ~)" aria-pressed="false" aria-label="Toggle Yiddish typing">A</button></div>
 <div id="status"><span id="count"></span><button id="refresh" type="button">Refresh data</button></div>
 <nav id="tabs"><button type="button" data-v="search" class="on">Search</button><button type="button" data-v="groups">Groups</button><button type="button" data-v="pairs">Pairs</button></nav>
 </header>
@@ -81,7 +87,7 @@ th{background:var(--nabg)}
 <script>
 const SHEET_ID='1grJ0TvZI_2iYKaEJSq0gU-Qs_hvHi7Rg8uP_sz8Rk0M';
 const url=n=>`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&sheet=${n}`;
-const CACHE_KEY='oy-lookup-v1',PAGE=50,DIALS=[['Klal','Klal (Standard)'],['NEY','NEY (Northeastern)'],['CY','CY (Central)'],['SEY','SEY (Southeastern)']];
+const CACHE_KEY='oy-lookup-v1',PAGE=50,FETCH_TIMEOUT=8000,DIALS=[['Klal','Klal (Standard)'],['NEY','NEY (Northeastern)'],['CY','CY (Central)'],['SEY','SEY (Southeastern)']];
 const $=id=>document.getElementById(id);
 function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
 
@@ -120,13 +126,21 @@ function setStatus(m){$('count').textContent=m}
 async function load(force){
  if(!force){try{const c=await idbGet(CACHE_KEY);if(c&&c.words){({words,rules,pairs}=c);setStatus(`${words.length} words (saved ${new Date(c.at).toLocaleDateString()})`);render()}}catch(e){}}
  try{
+  if(navigator.onLine===false)throw Object.assign(new Error('offline'),{name:'Offline'});
   setStatus(words.length?'Updating…':'Loading data…');
-  const get=async n=>{const r=await fetch(url(n));if(!r.ok)throw new Error(r.status);const t=await r.text();if(t.trim().startsWith('<'))throw new Error('Sheet is not public');return t};
+  // Give up after FETCH_TIMEOUT ms so a bad connection never leaves the app waiting; saved data stays in use.
+  const get=async n=>{const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),FETCH_TIMEOUT);
+   try{const r=await fetch(url(n),{signal:ac.signal});if(!r.ok)throw new Error(r.status);const t=await r.text();if(t.trim().startsWith('<'))throw new Error('Sheet is not public');return t}finally{clearTimeout(tm)}};
   const [a,b,c]=await Promise.all([get('Oy'),get('Rules'),get('MinimalPairs')]);
   words=buildWords(a);rules=buildRules(b);pairs=buildPairs(c);
   try{await idbSet(CACHE_KEY,{at:Date.now(),words,rules,pairs})}catch(e){}
   setStatus(`${words.length} words · up to date`);render();
- }catch(e){setStatus(words.length?`Offline — using saved data (${words.length} words)`:'Could not load the spreadsheet. Check that it is shared as “Anyone with the link can view”.')}}
+ }catch(e){
+  const slow=e.name==='AbortError',off=e.name==='Offline'||slow||e instanceof TypeError;
+  if(words.length)setStatus(`${slow?'Slow connection':'Offline'} — using saved data (${words.length} words)`);
+  else if(off)setStatus(`${slow?'Connection too slow':'No connection'} and no saved data yet. Tap Refresh data to try again.`);
+  else setStatus('Could not load the spreadsheet. Check that it is shared as “Anyone with the link can view”.')}}
+addEventListener('online',()=>load(true));
 function render(){search();drawGroups();drawPairs()}
 
 // ---- search
@@ -209,6 +223,30 @@ function setView(v){document.querySelectorAll('#tabs button').forEach(b=>b.class
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>setView(b.dataset.v));
 $('q').addEventListener('input',()=>{setView('search');search()});
 $('more').onclick=more;$('refresh').onclick=()=>load(true);
+// ---- Yiddish typing mode (Yiddish Klal layout): type ~ to toggle, ~~ for a literal ~
+// Maps physical keys (event.code) to [plain, shift, option, shift+option]; other keys type normally.
+const YK_MAP={KeyA:['אַ','א'],KeyS:['ס','ת'],KeyD:['ד','דזש'],KeyF:['פֿ','ף'],KeyG:['ג','דזש'],KeyH:['ה','ח'],KeyJ:['ײ','דזש'],KeyK:['ק','כּ'],KeyL:['ל','ל'],KeyQ:['ק','כּ'],KeyW:['ש','שׂ'],KeyE:['ע','ײ'],KeyR:['ר','טש'],KeyT:['ט','תּ','תֿ'],KeyY:['ײַ','ױ'],KeyU:['ו','וּ'],KeyI:['י','יִ'],KeyO:['אָ','ױ'],KeyP:['פּ','פ'],KeyZ:['ז','זש'],KeyX:['כ','ך','כֿ'],KeyC:['צ','ץ'],KeyV:['װ','בֿ'],KeyB:['ב','בּ'],KeyN:['נ','ן'],KeyM:['מ','ם'],
+ Minus:['־','-','–','—'],Equal:['=','+','⸗'],BracketLeft:['[','„','{','’'],BracketRight:[']','“','}','”'],Backslash:['\\','|','׳','״'],Quote:["'",'"','′','″'],Semicolon:[';',':','…']};
+let yiddishOn=false,lastTilde=false;
+try{yiddishOn=localStorage.getItem('oyYiddishTyping')==='1'}catch(e){}
+function updateYiddishUI(){const b=$('yid-toggle');b.textContent=yiddishOn?'א':'A';b.classList.toggle('on',yiddishOn);b.setAttribute('aria-pressed',yiddishOn);$('q').classList.toggle('yid-on',yiddishOn)}
+function setYiddish(on){yiddishOn=on;try{localStorage.setItem('oyYiddishTyping',on?'1':'0')}catch(e){}updateYiddishUI()}
+function insertAtCursor(inp,text){let ok=false;try{ok=document.execCommand('insertText',false,text)}catch(e){}
+ if(!ok){const a=inp.selectionStart==null?inp.value.length:inp.selectionStart,b=inp.selectionEnd==null?a:inp.selectionEnd;inp.setRangeText(text,a,b,'end');inp.dispatchEvent(new Event('input',{bubbles:true}))}}
+$('q').addEventListener('keydown',e=>{
+ if(e.isComposing||e.ctrlKey||e.metaKey)return;
+ if(e.key==='~'){e.preventDefault();if(e.repeat)return;
+  if(lastTilde){lastTilde=false;setYiddish(!yiddishOn);insertAtCursor(e.target,'~')}else{lastTilde=true;setYiddish(!yiddishOn)}return}
+ if(['Shift','Alt','Control','Meta','CapsLock'].includes(e.key))return;
+ lastTilde=false;
+ if(!yiddishOn||e.getModifierState('CapsLock'))return;
+ const m=YK_MAP[e.code];if(!m)return;
+ const out=e.altKey?(e.shiftKey?m[3]:m[2]):(e.shiftKey?m[1]:m[0]);
+ if(!out)return;e.preventDefault();insertAtCursor(e.target,out)});
+$('yid-toggle').addEventListener('mousedown',e=>e.preventDefault());
+$('yid-toggle').addEventListener('click',()=>{setYiddish(!yiddishOn);$('q').focus()});
+updateYiddishUI();
+
 // ---- export / import
 $('exp').onclick=()=>{
  if(!words.length){setStatus('Nothing to export yet.');return}
