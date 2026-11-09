@@ -115,7 +115,9 @@ function buildRules(csv){const T=table(csv),c=n=>T.col(n);
 function buildPairs(csv){const T=table(csv);return {head:T.head,rows:T.rows}}
 
 let words=[],rules=[],pairs={head:[],rows:[]},matches=[],shown=0;
-const ruleFor=code=>code?rules.find(r=>r.code===code):null;
+const gl=c=>(c||'').replace(/^G(?=\d)/i,'');
+const gk=c=>(c||'').trim().replace(/^G(?=\d)/i,'').toLowerCase();
+const ruleFor=code=>gk(code)?rules.find(r=>gk(r.code)===gk(code)):null;
 function parseDial(t){const re=/\b(Klal|NEY|CY|SEY|SY)\s*:/g;let m;const pos=[];
  while((m=re.exec(t)))pos.push([m[1],m.index,re.lastIndex]);if(!pos.length)return null;
  const o={};pos.forEach((p,i)=>{const v=t.slice(p[2],i+1<pos.length?pos[i+1][1]:t.length).trim().replace(/[.;]\s*$/,'');
@@ -178,7 +180,7 @@ function card(w){
  const dl=el('dl'),row=(l,v,node)=>{dl.append(el('dt',null,l));const d=el('dd');if(node)d.append(node);else if(v){d.textContent=v}else{d.className='empty';d.textContent='—'}dl.append(d)};
  row('Gloss',w.gloss);row('Component',w.component);
  const r=ruleFor(w.group);
- if(r){const b=el('button','rulelink',`Group ${w.group}`);b.type='button';b.onclick=()=>showRule(r);row('Group',null,b)}else row('Group',w.group);
+ if(r){const b=el('button','rulelink',`Group ${gl(w.group)}`);b.type='button';b.onclick=()=>showRule(r);row('Group',null,b)}else row('Group',gl(w.group));
  if(w.hint){const s=el('span','he',w.hint);s.lang='yi';row('Hint',null,s)}
  c.append(dl);
  const der=r?parseDial(r.pron):null,own={klal:w.klal,ney:w.ney,cy:w.cy,sey:w.sey},hasOwn=Object.values(own).some(Boolean),db=dialBlock(der,own);
@@ -195,17 +197,17 @@ function showRule(r){
  m.append(x,el('h3',null,r.name));
  if(r.when){m.append(el('div','rl','Applies when'),el('div','pre',r.when))}
  if(r.pron){m.append(el('div','rl','Pronunciation'));const d=parseDial(r.pron),b=d&&dialBlock(d,{});if(b)m.append(b);else m.append(el('div','pre',r.pron))}
- if(r.code&&words.some(w=>w.group===r.code)){const b=el('button','gb','See the words in this group');b.type='button';b.onclick=()=>{close();setView('groups');const t=document.querySelector(`[data-code="${r.code}"] .gb`);if(t){t.click();t.scrollIntoView({block:'start'})}};m.append(b)}
+ if(r.code&&words.some(w=>gk(w.group)===gk(r.code))){const b=el('button','gb','See the words in this group');b.type='button';b.onclick=()=>{close();setView('groups');const t=document.querySelector(`[data-code="${gk(r.code)}"] .gb`);if(t){t.click();t.scrollIntoView({block:'start'})}};m.append(b)}
  ov.append(m);document.body.append(ov)}
 
 // ---- tabs: groups, pairs
 function drawGroups(){const G=$('groups');G.innerHTML='';
  if(!rules.length){G.append(el('p','msg','No data yet.'));return}
- for(const r of rules){const n=el('div','note');if(r.code)n.dataset.code=r.code;
+ for(const r of rules){const n=el('div','note');if(r.code)n.dataset.code=gk(r.code);
   n.append(el('div','gt',r.name));
   if(r.when)n.append(el('div','pre',r.when));
   if(r.pron){n.append(el('div','rl','Pronunciation'));const d=parseDial(r.pron),b=d&&dialBlock(d,{});if(b)n.append(b);else n.append(el('div','pre',r.pron))}
-  const ws=r.code?words.filter(w=>w.group===r.code):[];
+  const ws=r.code?words.filter(w=>gk(w.group)===gk(r.code)):[];
   if(ws.length){const b=el('button','gb',`Show words (${ws.length})`);b.type='button';const chips=el('div','chips');chips.hidden=true;
    b.onclick=()=>{if(!chips.childElementCount)for(const w of ws){const c=el('button','chip',w.word);c.type='button';c.lang='yi';c.onclick=()=>{$('q').value=w.word;setView('search');search();scrollTo(0,0)};chips.append(c)}
     chips.hidden=!chips.hidden;b.textContent=(chips.hidden?'Show':'Hide')+` words (${ws.length})`};
