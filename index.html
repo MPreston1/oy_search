@@ -109,7 +109,7 @@ function table(csv){const t=parseCSV(csv),head=t[0].map(h=>h.trim().toLowerCase(
 function buildWords(csv){const T=table(csv),g=n=>T.col(n);
  const keys=['word','gloss','component','group','klal','ney','cy','sey','hint','notes'],ix={};keys.forEach(k=>ix[k]=g(k));
  return T.rows.filter(r=>(r[ix.word]||'').trim()).map(r=>{const o={};keys.forEach(k=>o[k]=ix[k]>=0?(r[ix[k]]||'').trim():'');
-  o.nw=norm(o.word);o.ng=norm(o.gloss);o.np=[o.klal,o.ney,o.cy,o.sey].map(norm).join('|');return o})}
+  o.nw=norm(o.word);o.ng=norm(o.gloss);return o})}
 function buildRules(csv){const T=table(csv),c=n=>T.col(n);
  return T.rows.map(r=>({code:(r[c('code')]||'').trim(),name:(r[c('rule')]||'').trim(),when:(r[c('applies when')]||'').trim(),pron:(r[c('pronunciation')]||'').trim()})).filter(r=>r.name)}
 function buildPairs(csv){const T=table(csv);return {head:T.head,rows:T.rows}}
@@ -148,11 +148,11 @@ function render(){search();drawGroups();drawPairs()}
 // ---- search
 function search(){
  const raw=$('q').value.trim(),q=norm(raw),R=$('results');
- if(!q){matches=[];R.innerHTML=words.length?'<p class="msg">Type a Yiddish word to search. Partial matches are included. English glosses and Latin forms like <i>oykh</i> work too.</p>':'';$('more').hidden=true;return}
+ if(!q){matches=[];R.innerHTML=words.length?'<p class="msg">Type a Yiddish word to search. Partial matches are included. English glosses work too.</p>':'';$('more').hidden=true;return}
  const latin=/[a-z]/i.test(raw),m=[];
  for(const w of words){let best=-1,len=0;
   const tryKey=s=>{if(!s)return;const p=s.indexOf(q);if(p<0)return;const sc=s===q?0:p===0?1:2;if(best<0||sc<best){best=sc;len=s.length}};
-  if(latin){tryKey(w.ng);tryKey(w.np)}else tryKey(w.nw);
+  if(latin)tryKey(w.ng);else tryKey(w.nw);
   if(best>=0)m.push([best,len,w])}
  m.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);matches=m.map(x=>x[2]);shown=0;R.innerHTML='';
  if(!matches.length){noMatch(raw,q);$('more').hidden=true;return}
@@ -262,7 +262,7 @@ $('impfile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!
  try{
   const j=JSON.parse(await f.text());
   if(j.app!=='oy-search'||!Array.isArray(j.words)||!j.words.every(w=>w&&typeof w.word==='string')||!Array.isArray(j.rules)||!j.pairs||!Array.isArray(j.pairs.rows))throw new Error('not an Oy Search export');
-  words=j.words.map(w=>({...w,nw:norm(w.word),ng:norm(w.gloss||''),np:[w.klal,w.ney,w.cy,w.sey].map(norm).join('|')}));
+  words=j.words.map(w=>({...w,nw:norm(w.word),ng:norm(w.gloss||'')}));
   rules=j.rules;pairs={head:j.pairs.head||[],rows:j.pairs.rows};
   try{await idbSet(CACHE_KEY,{at:Date.now(),words,rules,pairs})}catch(_){}
   setStatus(`${words.length} words (imported)`);render();
